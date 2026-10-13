@@ -1,0 +1,89 @@
+# yaiba
+
+Risk tooling for Lightning edge nodes that convert stablecoins to and from bitcoin.
+
+yaiba plugs into an edge node's Taproot Assets daemon (`tapd`) as its **Portfolio Pilot**, the external
+service tapd consults before it accepts any trade. On every quote, yaiba prices and guards against the
+**free American call option**, and it can screen the counterparty. It starts on Taproot Assets and is
+built so an RGB adapter can follow.
+
+> **Status:** Phase 0 (Discovery). No code yet. This README is the build plan and will be updated as each
+> phase closes.
+
+## Why it exists
+
+On Taproot Assets, only the first and last hops of a payment know which asset is moving. Every hop in
+between sees plain bitcoin; this is called *translated forwarding*. The two edge nodes at either end do
+the currency conversion, earn a spread, and carry the risk.
+
+The biggest of those risks is the free option. An edge node locks an exchange rate when it offers an
+HTLC, but the receiver decides later, up to the timeout, whether to reveal the secret that settles the
+payment. If the rate moves in the receiver's favour, they settle; if not, they let the payment expire at
+no cost. The edge node absorbs the loss. yaiba's job is to find that gap between price lock and final
+decision, and charge for it.
+
+## Glossary (plain English)
+
+| Term | Meaning |
+|---|---|
+| Edge node | A Lightning node that holds stablecoin inventory and converts between that asset and bitcoin at the edge of the network. |
+| tapd | The Taproot Assets daemon: the background program that holds assets, builds transactions and talks to peers. |
+| RFQ | Request for quote: a peer asks the edge node what rate it will give for a trade. |
+| Portfolio Pilot | An external service tapd asks to accept or reject each quote (added in tapd v0.8; still marked experimental). |
+| HTLC | Hash time lock contract: a payment that completes only if the receiver reveals a secret before a deadline. |
+| Free option | The receiver's costless right to walk away from a locked rate until the HTLC times out. |
+| Shadow mode | yaiba scores live traffic and records decisions but changes nothing. Operators see what it *would* have done. |
+| regtest / signet / mainnet | A private Bitcoin network on your own machine, a public test network, and the real network. |
+
+## How yaiba is built: two ladders
+
+Every phase moves up two ladders, one rung at a time, and never skips a rung. Each rung up makes a
+mistake more expensive.
+
+- **Network ladder:** regtest, then signet, then capped mainnet, then uncapped mainnet.
+- **Model ladder:** rules baseline, then offline evaluation on logged quotes, then shadow mode, then live
+  decisions.
+
+## Phase plan
+
+Each phase ends with an artifact and a pass/fail exit gate. The next phase doesn't start until the gate
+passes. Dates line up with the Quantic MSAIE Class of December 2027 schedule, so each course feeds the
+phase running alongside it.
+
+| Phase | Dates | Goal | Artifact | Exit gate | MSAIE course alongside |
+|---|---|---|---|---|---|
+| **0. Discovery** | Oct 13 – Oct 25, 2026 | Fix the problem, the user and the test for success | `docs/prd.md`: user, problem, success metrics, non-goals, kill threshold | Founder signs the PRD and the kill threshold before any code | Managing AI Engineering: AI-Assisted Software Development; Managing AI Application Development I |
+| **1. Design** | Oct 26 – Nov 8, 2026 | Decide how it works before coding | `docs/architecture.md`, `docs/adr/` (one page per major decision), `docs/threat-model.md` | Every attack and failure mode has an owner and a mitigation | Managing AI Application Development II; User-Centered Design; Cloud Foundations |
+| **2. Spike** | Nov 2 – Nov 15, 2026 | Prove the riskiest unknown on regtest | Throwaway Docker regtest network (bitcoind, 2× LND, 2× tapd), a stub pilot, `docs/spikes/001-portfolio-pilot.md` | tapd calls the stub pilot on every quote, and one test-stablecoin payment is priced by yaiba | Cloud Foundations; Professionalism and Ethics |
+| *Light weeks* | Nov 16 – Dec 6, 2026 | Protect the exam and course project | Draft quote-log and decision table schemas | None; no new build work | Managing AI Engineering Exam and Project |
+| **3. MVP** | Dec 7, 2026 – Feb 21, 2027 | The smallest real product, test-first | Python Portfolio Pilot, rules-based free-option guard (short expiries, volatility-based spreads, per-peer walk-away tracking), PostgreSQL quote log, operator dashboard, CI, regtest benchmark baseline | All tests and CI green, and the guard measurably cuts edge-node losses in a replayed regtest scenario | Web Application and Interface Design (dashboard, databases, back end); Software Testing and CI/CD (tests, CI, performance monitoring) |
+| **4. Alpha** | Feb 22 – Apr 11, 2027 | Real operators on a test network | Integration guide, open-source reference pilot, design-partner list (names kept private), signet deployment in shadow mode, LLM analyst that writes plain-English case notes | Kill threshold met: the demo is shown to at least 5 operators by Mar 31, 2027, and at least 1 runs yaiba in shadow mode on signet by Apr 11. Otherwise, pivot | AI Engineering Techniques and Architectures (prompting, LLM apps, agents) |
+| *Hardening* | Apr 12 – May 16, 2027 | Make it adapter-ready | ADR for the protocol-adapter layer; RGB adapter design once Utexo's Lightning support ships | Core logic has no tapd-specific code | Software Design and Architecture |
+| *Model* | May 17 – Jul 11, 2027 | Replace the rules baseline with a learned detector | Free-option detector trained on alpha shadow logs, with an offline evaluation report | Beats the rules baseline offline, then in shadow mode, before it can affect any decision | Machine Learning to AI Model Fine-Tuning |
+| **5. Beta** | Jul 12 – Sep 26, 2027 | Real money, deliberately limited | Security review, release checklist, incident runbook, pricing and go-to-market plan, containerised deployment | Capped mainnet with at least 1 operator, monitoring live, no unexplained losses through the Sep 20 capstone check-in | AI and Organizational Transformation (go-to-market); Capstone Kickoff Aug 16; Microservices Architectures (deploy, test, scale) |
+| *Capstone* | Sep 27 – Nov 21, 2027 | Package the evidence | Capstone written report and presentation built from beta results | Submitted by Nov 21, 2027, 11:59 p.m. PT | Specialization Period; Capstone check-ins Sep 20 and Oct 18 |
+| **6. General availability** | From Dec 2027 | Scale | Service-level agreement, pricing, support process, second protocol adapter | Repeatable operator onboarding, and revenue covers running costs | After graduation (Dec 23, 2027) |
+
+Winter break (Dec 21, 2026 – Jan 3, 2027) is not counted as build time.
+
+## Running alongside the phases
+
+- **Co-founder search** from Phase 3: ideally a Go engineer who already runs Lightning infrastructure.
+- **Funding:** an open-source grant application once the reference pilot is public (Phase 4); a strategic
+  pitch to stablecoin and Bitcoin-infrastructure investors after Alpha shows operator usage.
+- **Community:** Tampa Bay BitDevs, the taproot-assets GitHub repository, and Delving Bitcoin.
+
+## Non-goals (for now)
+
+- No custom smart contracts, and nothing on non-Bitcoin chains.
+- yaiba never makes legal conclusions. Counterparty screening defaults to *advise mode* (accept, record a
+  signed REVIEW_REQUIRED decision, alert the operator). Rejecting trades is an opt-in *enforce mode* the
+  operator turns on.
+- Compliance screening is the second feature. yaiba leads with free-option risk, which helps a single
+  operator from day one.
+
+## Pinned upstream
+
+| Component | Reference |
+|---|---|
+| Taproot Assets | [lightninglabs/taproot-assets](https://github.com/lightninglabs/taproot-assets), Portfolio Pilot interface at `taprpc/portfoliopilotrpc/portfolio_pilot.proto`, commit `9db270f` (Oct 9, 2026) |
