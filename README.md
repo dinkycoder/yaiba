@@ -18,7 +18,7 @@ the currency conversion, earn a spread, and carry the risk.
 
 The biggest of those risks is the free option. An edge node locks an exchange rate when it offers an
 HTLC, but the receiver decides later, up to the timeout, whether to reveal the secret that settles the
-payment. If the rate moves in the receiver's favour, they settle; if not, they let the payment expire at
+payment. If the rate moves in the receiver's favor, they settle; if not, they let the payment expire at
 no cost. The edge node absorbs the loss. Yaiba's job is to find that gap between price lock and final
 decision, and charge for it.
 
