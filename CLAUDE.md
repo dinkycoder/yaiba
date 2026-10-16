@@ -18,6 +18,7 @@ feature. The full plan, phase gates and dates are in [README.md](README.md). Rea
 - Bitcoin and Lightning only. Taproot Assets first; RGB through an adapter once its Lightning support ships.
 - Lead with free-option risk; compliance screening is second. Screening defaults to advise mode
   (accept, record a signed REVIEW_REQUIRED decision, alert the operator). Enforce mode is opt-in.
+- AI is the system being built: a learned free-option detector is the engine and the Phase 3 rules guard is its safety envelope (baseline, fallback, hard limits); the detector, operator risk agent and signet demo are the capstone deliverables ([ADR 0001](docs/adr/0001-ai-engine-rules-envelope.md)).
 - A lab runs about one day a week alongside the phase plan (README "Lab practice"). Setting up
   `docs/lab/` (bet list plus five agent definitions) is a Phase 1 task.
 
