@@ -105,9 +105,11 @@ free option**. An exercised option is a quote that was:
   then they walked away.
 
 The threshold is a parameter to tune (**Assumption:** start near the quoted spread). The model is used *at
-quote time*. Yaiba turns p into terms: expected option cost ≈ p × expected loss if exercised, which is
-added to the spread, and high p also shortens expiry, cuts size, or leads to a reject. Then the envelope
-clamps the result.
+quote time*. Yaiba turns p into terms with an **expected value**, the probability-weighted average of the
+outcomes: expected option cost = p × expected loss if exercised. That cost is added to the spread, and high
+p also shortens expiry, cuts size, or leads to a reject. Then the envelope clamps the result. **Worked
+example:** if p = 0.10 and an exercise would cost the node 2,000 sats, the expected cost is 200 sats, so the
+quote carries at least 200 sats of extra spread.
 
 ### 5.2 Candidate features
 
@@ -118,9 +120,14 @@ moment the quote is priced**.
 |---|---|---|
 | Quote request | size, min fill, rate limit vs. market mid, buy or sell, execution policy | pinned proto fields |
 | Peer history | past settle rate, past walk-away rate, walk-aways after adverse moves, typical past hold time, count of past quotes | Yaiba's quote log |
-| Market state | recent volatility, recent price trend, price-feed staleness | price feed (**source to choose**) |
+| Market state | GARCH volatility forecast, recent price trend, price-feed staleness | price feed (**source to choose**) |
 | Time | hour of day, day of week | clock |
 | Channel context | channel size, local asset balance, number of open HTLCs with this peer | node interfaces (**to verify**) |
+
+**GARCH** (generalized autoregressive conditional heteroscedasticity) is a time-series model that forecasts
+near-term volatility and weights recent price swings more than old ones. Volatility drives what the option
+is worth, so a forecast is a better input than a plain rolling average. GARCH is fitted on the training
+window only, so test-window prices never shape it.
 
 **Hold time and price move during the hold of the *current* quote are not features.** They happen after
 the decision and make up the label itself. Feeding them in is **leakage**: the model would look brilliant
@@ -198,7 +205,7 @@ lets the model peek at a peer's future behaviour through its neighbours in time,
 |---|---|---|
 | **Offline** | Train and score on logged and simulated quotes. | On the held-out time window, saves more sats than the rules baseline at the fixed false-penalty rate, with no higher honest spread cost; calibration within tolerance; leakage check passed. |
 | **Shadow** | Runs live on signet beside the rules guard and records its would-be decisions, which have no effect. | At least 4 weeks (**Assumption**) with shadow metrics matching offline within tolerance; response time within tapd's budget (**to verify** in source); every fallback path exercised; no crash leaves a quote unanswered. |
-| **Live** | Model decides inside the envelope, with a switch back to rules. Signet first, then capped mainnet. | After the capstone, by founder approval only: weeks on capped mainnet with zero envelope breaches and losses no worse than the baseline. |
+| **Live** | Model decides inside the envelope. A **feature toggle** (a setting that turns the model off without a redeploy) sends every quote back to the rules at once. Rollout is a **canary**: the model decides a small share of quotes first (**Assumption:** 5–10%), and the share grows only while each step stays clean. Signet first, then capped mainnet. | After the capstone, by founder approval only: weeks on capped mainnet with zero envelope breaches and losses no worse than the baseline. |
 
 The capstone climbs to shadow. Live is out of capstone scope.
 
@@ -233,7 +240,7 @@ These are Yaiba's own tool names, proposed here. They are not tapd interfaces.
   Approval happens in the dashboard and is logged with the approver.
 - **Prompt-injection defence.** Peers control some logged text, for example the proto's free-form
   `price_oracle_metadata` string. All log content is passed to the model as quoted data, never as
-  instructions, and the eval set includes injection attempts.
+  instructions, and the golden set includes injection attempts.
 - **Privacy.** Peer IDs are pseudonymised before any text leaves the machine for a hosted LLM (**founder
   decision:** hosted or local model).
 - **Audit.** Every tool call and answer is logged.
@@ -247,9 +254,11 @@ These are Yaiba's own tool names, proposed here. They are not tapd interfaces.
   as "could not verify".
 - When the log lacks the answer, the correct reply is "not in the log".
 
-### 6.4 Evaluation set
+### 6.4 Golden set
 
-About 60 operator questions (**Assumption** on size). Expected answers come from simulator runs where the
+A **golden set** is a small, fixed bank of test questions with unambiguous correct answers, kept diverse
+across task types and updated as the agent changes. Yaiba's holds about 60 operator questions
+(**Assumption** on size). Expected answers come from simulator runs where the
 truth is known. Some example rows:
 
 | Category | Example question | Expected answer (shape) |
@@ -296,7 +305,7 @@ goes through review and CI like any other code.
 | Methodology and tools | Detector pipeline, evaluation harness, MLOps | ADRs, time-split evaluation report, CI runs, model registry, reproducible training |
 | Working demo to stakeholders | Signet demo: attack, rules vs. model, agent explains | Recorded demo, check-in presentations Sep 20 and Oct 18, design-partner feedback if available |
 | AI tooling for development | The five lab agents plus coding assistants | Agent definitions, scout briefs, red-team strategies, evaluator scorecards |
-| AI engineering techniques throughout | Detector (classical ML to sequence model), operator agent (tools, grounding, guardrails, evals) | Model comparison, calibration and leakage results, agent eval scores, injection test results |
+| AI engineering techniques throughout | Detector (classical ML to sequence model), operator agent (tools, grounding, guardrails, evals) | Model comparison, calibration and leakage results, agent golden-set scores, injection test results |
 
 ### 8.2 Pre-capstone vs. capstone increment
 
@@ -304,7 +313,7 @@ goes through review and CI like any other code.
 |---|---|
 | Rules guard and quote log (Phase 3) | Production feature pipeline and retrained detector |
 | Regtest market simulator | Signet shadow deployment and shadow-gate results |
-| Signet shadow logs (Alpha) | Operator risk agent: tools, grounding checker, guardrails, eval set |
+| Signet shadow logs (Alpha) | Operator risk agent: tools, grounding checker, guardrails, golden set |
 | First offline model and report (May – Jul ML course) | Dashboard views for model decisions and agent proposals |
 | Lab agent definitions (Phase 1) | MLOps: CI for models, registry, monitoring, rollback to rules |
 | | Evaluation report, signet demo, presentation |
@@ -318,7 +327,7 @@ at all is an open Quantic question (section 9).
 | Sprint | Dates | Goal |
 |---|---|---|
 | 1 | Aug 16 – 29 | Onboarding, team-run signet network, data contracts, evaluation harness |
-| 2 | Aug 30 – Sep 12 | Feature pipeline, detector retrain; agent tools and eval set v1 |
+| 2 | Aug 30 – Sep 12 | Feature pipeline, detector retrain; agent tools and golden set v1 |
 | 3 | Sep 13 – 26 | Offline gate; grounding checker. **Check-in Sep 20:** offline results |
 | 4 | Sep 27 – Oct 10 | Shadow deployment on signet; agent in dashboard |
 | 5 | Oct 11 – 24 | Shadow run; red-team strategies. **Check-in Oct 18:** shadow results |
@@ -336,7 +345,7 @@ founder owns.
 |---|---|
 | Founder (Dinky) | Portfolio Pilot core, protocol adapters, rules envelope, data contracts, product owner |
 | ML pipeline and evaluation | Features, labels, training, time-split evaluation, leakage checks, report |
-| Operator agent | Tools, prompts, grounding checker, guardrails, eval set |
+| Operator agent | Tools, prompts, grounding checker, guardrails, golden set |
 | Dashboard and demo | Operator views, proposal approval flow, signet demo |
 | MLOps and CI | Model CI, registry, shadow deployment, monitoring, rollback |
 
